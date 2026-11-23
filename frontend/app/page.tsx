@@ -1,36 +1,46 @@
+import DashboardLayout from "@/components/layout/DashboardLayout";
+import StatCard from "@/components/dashboard/StatCard";
 
 export default function Home() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-white">
-      <div className="max-w-2xl text-center">
-        <p className="mb-4 text-sm font-semibold uppercase tracking-[0.3em] text-blue-400">
-          Smart Inventory Management
-        </p>
+    <DashboardLayout>
+      <div>
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+            Welcome to TrueStock AI
+          </h1>
 
-        <h1 className="text-5xl font-bold tracking-tight sm:text-6xl">
-          TrueStock <span className="text-blue-400">AI</span>
-        </h1>
-
-        <p className="mt-6 text-lg leading-8 text-slate-300">
-          Manage inventory, monitor sales, understand your business
-          and make smarter decisions with AI-powered insights.
-        </p>
-
-        <div className="mt-8 flex justify-center gap-4">
-          <button className="rounded-lg bg-blue-600 px-6 py-3 font-semibold hover:bg-blue-500">
-            Get Started
-          </button>
-
-          <button className="rounded-lg border border-slate-600 px-6 py-3 font-semibold hover:bg-slate-800">
-            Learn More
-          </button>
+          <p className="mt-2 text-slate-500 dark:text-slate-400">
+            Your intelligent inventory management platform.
+          </p>
         </div>
 
-        <p className="mt-12 text-sm text-slate-500">
-          © 2026 TrueStock AI. All rights reserved.
-        </p>
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            title="Total Products"
+            value="1,250"
+            description="Sample dashboard data"
+          />
+
+          <StatCard
+            title="Total Stock"
+            value="8,420"
+            description="Sample dashboard data"
+          />
+
+          <StatCard
+            title="Low Stock Items"
+            value="24"
+            description="Sample dashboard data"
+          />
+
+          <StatCard
+            title="Total Suppliers"
+            value="85"
+            description="Sample dashboard data"
+          />
+        </div>
       </div>
-    </main>
+    </DashboardLayout>
   );
 }
-
