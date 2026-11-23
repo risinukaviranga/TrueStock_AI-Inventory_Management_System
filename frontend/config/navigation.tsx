@@ -1,7 +1,8 @@
+
 export const navigationItems = [
   {
     title: "Dashboard",
-    href: "/",
+    href: "/dashboard",
   },
   {
     title: "Products",
