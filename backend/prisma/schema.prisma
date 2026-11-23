@@ -11,3 +11,449 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+// 1. Enums for fixed states & types
+enum TenantPlan {
+  FREE
+  STARTER
+  PRO
+  ENTERPRISE
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  TRIAL
+}
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  INACTIVE
+}
+
+enum MovementType {
+  IN
+  OUT
+  TRANSFER
+  ADJUSTMENT
+}
+
+enum OrderStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  PARTIAL
+  COMPLETED
+  CANCELLED
+}
+
+enum InvoiceStatus {
+  UNPAID
+  PARTIAL
+  PAID
+  OVERDUE
+  VOID
+}
+
+enum AlertSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+// Module 1: Tenant (Multi-Tenant Root)
+model Tenant {
+  id       String       @id @default(uuid()) @db.Uuid
+  name     String
+  slug     String       @unique
+  plan     TenantPlan   @default(FREE)
+  status   TenantStatus @default(ACTIVE)
+  timezone String       @default("Asia/Colombo")
+  currency String       @default("LKR")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users          User[]
+  roles          Role[]
+  locations      Location[]
+  categories     Category[]
+  products       Product[]
+  suppliers      Supplier[]
+  customers      Customer[]
+  stockLevels    StockLevel[]
+  stockMovements StockMovement[]
+  purchaseOrders PurchaseOrder[]
+  salesOrders    SalesOrder[]
+  invoices       Invoice[]
+  stockCounts    StockCount[]
+  alerts         Alert[]
+  aiForecasts    AiForecast[]
+  webhooks       Webhook[]
+  auditLogs      AuditLog[]
+  settings       TenantSetting[]
+
+  @@map("tenants")
+}
+
+// Module 2: Users
+model User {
+  id        String     @id @default(uuid()) @db.Uuid
+  tenantId  String     @db.Uuid
+  roleId    String?    @db.Uuid
+  email     String
+  name      String
+  status    UserStatus @default(ACTIVE)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  role      Role?      @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  auditLogs AuditLog[]
+
+  @@unique([tenantId, email])
+  @@map("users")
+}
+
+// Module 3: Roles & Permissions
+model Role {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid
+  name        String
+  permissions Json     @default("[]")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  users  User[]
+
+  @@unique([tenantId, name])
+  @@map("roles")
+}
+
+// Module 4: Locations (Warehouses / Stores)
+model Location {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  name      String
+  code      String
+  address   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  stockLevels    StockLevel[]
+  stockMovements StockMovement[]
+  stockCounts    StockCount[]
+
+  @@unique([tenantId, code])
+  @@map("locations")
+}
+
+// Module 5: Categories
+model Category {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  name      String
+  slug      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  products Product[]
+
+  @@unique([tenantId, slug])
+  @@map("categories")
+}
+
+// Module 6: Products / Items
+model Product {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @db.Uuid
+  categoryId   String?  @db.Uuid
+  sku          String
+  name         String
+  unit         String   @default("pcs")
+  costPrice    Decimal  @default(0) @db.Decimal(12, 2)
+  sellPrice    Decimal  @default(0) @db.Decimal(12, 2)
+  reorderLevel Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant         Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category       Category?           @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  stockLevels    StockLevel[]
+  stockMovements StockMovement[]
+  poItems        PurchaseOrderItem[]
+  soItems        SalesOrderItem[]
+  countItems     StockCountItem[]
+  alerts         Alert[]
+  aiForecasts    AiForecast[]
+
+  @@unique([tenantId, sku])
+  @@map("products")
+}
+
+// Module 7: Suppliers
+model Supplier {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  name      String
+  email     String?
+  phone     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  purchaseOrders PurchaseOrder[]
+
+  @@map("suppliers")
+}
+
+// Module 8: Customers
+model Customer {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  name      String
+  email     String?
+  phone     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  salesOrders SalesOrder[]
+
+  @@map("customers")
+}
+
+// Module 9: Stock Levels (Current Quantity per Product & Location)
+model StockLevel {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @db.Uuid
+  productId  String   @db.Uuid
+  locationId String   @db.Uuid
+  quantity   Int      @default(0)
+  reserved   Int      @default(0)
+  updatedAt  DateTime @updatedAt
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, locationId])
+  @@map("stock_levels")
+}
+
+// Module 10: Stock Movements (Ledger of IN / OUT / TRANSFER / ADJUSTMENT)
+model StockMovement {
+  id         String       @id @default(uuid()) @db.Uuid
+  tenantId   String       @db.Uuid
+  productId  String       @db.Uuid
+  locationId String       @db.Uuid
+  type       MovementType
+  quantity   Int
+  reference  String?
+  notes      String?
+  createdAt  DateTime     @default(now())
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@map("stock_movements")
+}
+
+// Module 11: Purchase Orders
+model PurchaseOrder {
+  id         String      @id @default(uuid()) @db.Uuid
+  tenantId   String      @db.Uuid
+  supplierId String      @db.Uuid
+  poNumber   String
+  status     OrderStatus @default(DRAFT)
+  total      Decimal     @default(0) @db.Decimal(12, 2)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  tenant   Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  supplier Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  items    PurchaseOrderItem[]
+
+  @@unique([tenantId, poNumber])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id              String  @id @default(uuid()) @db.Uuid
+  purchaseOrderId String  @db.Uuid
+  productId       String  @db.Uuid
+  quantity        Int
+  unitCost        Decimal @db.Decimal(12, 2)
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  product       Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@map("purchase_order_items")
+}
+
+// Module 12: Sales Orders
+model SalesOrder {
+  id         String      @id @default(uuid()) @db.Uuid
+  tenantId   String      @db.Uuid
+  customerId String?     @db.Uuid
+  soNumber   String
+  status     OrderStatus @default(DRAFT)
+  total      Decimal     @default(0) @db.Decimal(12, 2)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  tenant   Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  items    SalesOrderItem[]
+  invoices Invoice[]
+
+  @@unique([tenantId, soNumber])
+  @@map("sales_orders")
+}
+
+model SalesOrderItem {
+  id           String  @id @default(uuid()) @db.Uuid
+  salesOrderId String  @db.Uuid
+  productId    String  @db.Uuid
+  quantity     Int
+  unitPrice    Decimal @db.Decimal(12, 2)
+
+  salesOrder SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  product    Product    @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@map("sales_order_items")
+}
+
+// Module 13: Invoices & Billing
+model Invoice {
+  id            String        @id @default(uuid()) @db.Uuid
+  tenantId      String        @db.Uuid
+  salesOrderId  String?       @db.Uuid
+  invoiceNumber String
+  status        InvoiceStatus @default(UNPAID)
+  amountDue     Decimal       @db.Decimal(12, 2)
+  issuedAt      DateTime      @default(now())
+  dueAt         DateTime?
+
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  salesOrder SalesOrder? @relation(fields: [salesOrderId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, invoiceNumber])
+  @@map("invoices")
+}
+
+// Module 14: Stock Counts / Audits
+model StockCount {
+  id         String      @id @default(uuid()) @db.Uuid
+  tenantId   String      @db.Uuid
+  locationId String      @db.Uuid
+  reference  String
+  status     OrderStatus @default(DRAFT)
+  createdAt  DateTime    @default(now())
+
+  tenant   Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  location Location         @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  items    StockCountItem[]
+
+  @@unique([tenantId, reference])
+  @@map("stock_counts")
+}
+
+model StockCountItem {
+  id           String @id @default(uuid()) @db.Uuid
+  stockCountId String @db.Uuid
+  productId    String @db.Uuid
+  systemQty    Int
+  countedQty   Int
+
+  stockCount StockCount @relation(fields: [stockCountId], references: [id], onDelete: Cascade)
+  product    Product    @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@map("stock_count_items")
+}
+
+// Module 15: Alerts & Low-Stock Notifications
+model Alert {
+  id         String        @id @default(uuid()) @db.Uuid
+  tenantId   String        @db.Uuid
+  productId  String?       @db.Uuid
+  severity   AlertSeverity @default(WARNING)
+  message    String
+  isResolved Boolean       @default(false)
+  createdAt  DateTime      @default(now())
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@map("alerts")
+}
+
+// Module 16: AI Demand Forecasts
+model AiForecast {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @db.Uuid
+  productId    String   @db.Uuid
+  forecastDate DateTime
+  predictedQty Int
+  confidence   Float?
+  modelVersion String?
+  createdAt    DateTime @default(now())
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("ai_forecasts")
+}
+
+// Module 17: Webhooks & Integrations
+model Webhook {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  url       String
+  events    String[]
+  secret    String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("webhooks")
+}
+
+// Module 18: Audit Logs & Tenant Settings
+model AuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  userId    String?  @db.Uuid
+  action    String
+  entity    String
+  entityId  String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("audit_logs")
+}
+
+model TenantSetting {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  key       String
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, key])
+  @@map("tenant_settings")
+}
