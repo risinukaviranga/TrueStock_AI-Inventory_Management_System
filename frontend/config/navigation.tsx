@@ -9,9 +9,14 @@ export const navigationItems = [
     href: "/products",
   },
   {
+  title: "Categories",
+  href: "/categories",
+  },
+  {
     title: "Inventory",
     href: "/inventory",
   },
+  
   {
     title: "Suppliers",
     href: "/suppliers",
