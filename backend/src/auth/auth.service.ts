@@ -8,13 +8,18 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { JwtService } from '@nestjs/jwt';
+
 
 import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
 
 @Injectable()
 export class AuthService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly jwtService: JwtService,
+  ) {}
 
   // ============================================
   // USER REGISTRATION
@@ -98,7 +103,7 @@ export class AuthService {
   // USER LOGIN
   // ============================================
 
-  async login(loginDto: LoginDto) {
+  /*async login(loginDto: LoginDto) {
     const { email, password } = loginDto;
 
     // 1. Normalize email
@@ -139,6 +144,64 @@ export class AuthService {
       message: 'Login successful',
       user: safeUser,
     };
+  }*/
+  
+async login(loginDto: LoginDto) {
+  const { email, password } = loginDto;
+
+  const normalizedEmail = email.trim().toLowerCase();
+
+  // Find user
+  const user = await this.prisma.user.findUnique({
+    where: {
+      email: normalizedEmail,
+    },
+  });
+
+  if (!user) {
+    throw new UnauthorizedException('Invalid email or password');
   }
+
+  // Verify password
+  const isPasswordValid = await bcrypt.compare(
+    password,
+    user.passwordHash,
+  );
+
+  if (!isPasswordValid) {
+    throw new UnauthorizedException('Invalid email or password');
+  }
+
+  // Generate JWT payload
+  const payload = {
+    sub: user.id,
+    email: user.email,
+    role: user.role,
+    tenantId: user.tenantId,
+  };
+
+  // Generate access token
+  const accessToken = await this.jwtService.signAsync(payload);
+
+  // Return token and safe user information
+  return {
+    message: 'Login successful',
+
+    accessToken,
+
+    tokenType: 'Bearer',
+
+    expiresIn: process.env.JWT_EXPIRES_IN || '15m',
+
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      tenantId: user.tenantId,
+    },
+  };
+}
+
 }
 
